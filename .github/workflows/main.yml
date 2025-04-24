@@ -6,44 +6,46 @@ on:
 jobs:
   analyze-mutations:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: 📥 Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install dependencies
+      - name: 🛠️ Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y sra-toolkit fastqc bwa samtools bcftools python3-pip
-          pip install matplotlib pandas
+          sudo apt-get install -y sra-toolkit fastqc bwa samtools bcftools
+          prefetch --version
+          bwa 2>&1 | head -n 2
+          samtools --version
+          bcftools --version
 
-      - name: Download SRA and convert to FASTQ
+      - name: 📥 Download SRA and convert to FASTQ
         run: |
           prefetch SRR27104041
           fasterq-dump SRR27104041
           mv SRR27104041.fastq reads.fastq
+          ls -lh reads.fastq
 
-      - name: Index reference genome
-        run: |
-          bwa index NC_045512.2.fasta
+      - name: 🔬 Index reference genome
+        run: bwa index NC_045512.2.fasta
 
-      - name: Align reads to reference
-        run: |
-          bwa mem NC_045512.2.fasta reads.fastq > aln.sam
+      - name: 🧬 Align reads to reference
+        run: bwa mem NC_045512.2.fasta reads.fastq > aln.sam
 
-      - name: Convert SAM to BAM, sort and index
+      - name: 🔄 Convert SAM to BAM, sort and index
         run: |
           samtools view -Sb aln.sam > aln.bam
           samtools sort aln.bam -o aln.sorted.bam
           samtools index aln.sorted.bam
 
-      - name: Call variants with bcftools
+      - name: 🧪 Call variants with bcftools
         run: |
-          bcftools mpileup -f NC_045512.2.fasta aln.sorted.bam | bcftools call -mv -Oz -o variants.vcf.gz
-          bcftools index variants.vcf.gz
-          bcftools view variants.vcf.gz > variants.vcf
+          bcftools mpileup -f NC_045512.2.fasta aln.sorted.bam | bcftools call -mv -Ov -o variants.vcf
+          cat variants.vcf | tail -n 20
 
-      - name: Upload mutation list
-        uses: actions/upload-artifact@v3
+      - name: 📤 Upload mutation list
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: variants
           path: variants.vcf
