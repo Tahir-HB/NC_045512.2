@@ -43,7 +43,8 @@ jobs:
           bcftools view variants.vcf.gz > variants.vcf
 
       - name: Upload mutation list
-        uses: actions/upload-artifact@v3
-        with:
-          name: variants
-          path: variants.vcf
+  uses: actions/upload-artifact@v3.1.2
+  with:
+    name: variants
+    path: variants.vcf
+
