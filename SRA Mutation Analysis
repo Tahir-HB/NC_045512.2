@@ -1,48 +1,93 @@
-name: SRA Mutation Analysis
+name: SRA to VCF Pipeline
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Allows manual triggering of the workflow
 
 jobs:
-  analyze-mutations:
+  run-sra-to-vcf:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the repository (if needed)
       - name: 📥 Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Install dependencies
       - name: 🔧 Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y sra-toolkit fastqc bwa samtools bcftools
+          sudo apt-get update -qq
+          sudo apt-get install -y bwa samtools bcftools wget
 
-      - name: 📥 Download SRA and convert to FASTQ
+      # Step 3: Download reference genome
+      - name: 📥 Download reference genome
         run: |
-          prefetch SRR27104041
-          fasterq-dump SRR27104041
-          mv SRR27104041.fastq reads.fastq
+          wget -O reference.fasta https://raw.githubusercontent.com/<username>/<repository>/main/wuhan-hu-1.fasta
+          if [ ! -s reference.fasta ]; then
+            echo "Error: Failed to download reference genome."
+            exit 1
+          fi
 
+      # Step 4: Download SRA sequence
+      - name: 📥 Download SRA sequence
+        run: |
+          wget -O reads.fastq https://raw.githubusercontent.com/<username>/<repository>/main/sra-to-analyze.fasta
+          if [ ! -s reads.fastq ]; then
+            echo "Error: Failed to download SRA sequence."
+            exit 1
+          fi
+
+      # Step 5: Index the reference genome
       - name: 🔬 Index reference genome
-        run: bwa index NC_045512.2.fasta
+        run: |
+          bwa index reference.fasta
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to index reference genome."
+            exit 1
+          fi
 
+      # Step 6: Align reads to the reference genome
       - name: 🧬 Align reads to reference
-        run: bwa mem NC_045512.2.fasta reads.fastq > aln.sam
+        run: |
+          bwa mem reference.fasta reads.fastq > aln.sam
+          if [ $? -ne 0 ]; then
+            echo "Error: Alignment failed."
+            exit 1
+          fi
 
-      - name: 🔄 Convert SAM to BAM, sort and index
+      # Step 7: Convert SAM to BAM, sort, and index
+      - name: 🔄 Convert SAM to BAM
         run: |
           samtools view -Sb aln.sam > aln.bam
           samtools sort aln.bam -o aln.sorted.bam
           samtools index aln.sorted.bam
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to process BAM file."
+            exit 1
+          fi
 
-      - name: 🧪 Call variants with bcftools
+      # Step 8: Call variants using bcftools
+      - name: 🧪 Call variants
         run: |
-          bcftools mpileup -f NC_045512.2.fasta aln.sorted.bam | bcftools call -mv -Ov -o variants.vcf
+          bcftools mpileup -f reference.fasta aln.sorted.bam | bcftools call -mv -Ov -o variants.vcf
+          if [ $? -ne 0 ]; then
+            echo "Error: Variant calling failed."
+            exit 1
+          fi
 
-      - name: 📤 Verify file exists before upload
-        run: ls -lh variants.vcf
+      # Step 9: Filter for Variants of Interest (VOI)
+      - name: 🔍 Filter VOI
+        run: |
+          bcftools filter -i 'QUAL > 20' variants.vcf > voi.vcf
+          if [ $? -ne 0 ]; then
+            echo "Error: Filtering failed."
+            exit 1
+          fi
 
-      - name: 📤 Upload mutation list
-        uses: actions/upload-artifact@v4  # Updated from v3 to v4
+      # Step 10: Upload output files as artifacts
+      - name: 📤 Upload VCF and VOI files
+        uses: actions/upload-artifact@v4
         with:
-          name: variants
-          path: variants.vcf
+          name: vcf-output
+          path: |
+            variants.vcf
+            voi.vcf
