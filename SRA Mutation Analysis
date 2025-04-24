@@ -41,9 +41,9 @@ jobs:
         run: |
           bcftools mpileup -f NC_045512.2.fasta aln.sorted.bam | bcftools call -mv -Ov -o variants.vcf
           tail -n 20 variants.vcf
-
-            - name: 📤 Upload mutation list
-        uses: actions/upload-artifact@27b4e5b5237e1c18c126e6fd61bd32f17324852a
-        with:
-          name: variants
-          path: variants.vcf
+- name: 📤 Upload mutation list
+uses: actions/upload-artifact@v3
+with:
+name: variants
+path: variants.vcf
+        
